@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import CategoryFilter from "@/components/CategoryFilter";
+import ConfirmSheet, { type ConfirmState } from "@/components/ConfirmSheet";
 import Header from "@/components/Header";
 import InvoiceList from "@/components/InvoiceList";
 import InvoiceSheet from "@/components/InvoiceSheet";
@@ -27,6 +28,7 @@ export default function Home() {
   const [filter, setFilter] = useState<Category | "All">("All");
   const [sheet, setSheet] = useState<SheetState>(null);
   const [toast, setToast] = useState<ToastState | null>(null);
+  const [confirm, setConfirm] = useState<ConfirmState | null>(null);
 
   useEffect(() => {
     try {
@@ -87,22 +89,38 @@ export default function Home() {
 
   const resetTab = () => {
     if (!isTaskTab) return;
-    const before = data.tasks.filter((t) => t.freq === tab);
-    if (!window.confirm(`Uncheck all ${FREQ_LABEL[tab].toLowerCase()} tasks to start a new ${tab === "daily" ? "day" : tab.replace("ly", "")}?`)) return;
-    actions.resetFreq(tab);
-    notify(`${FREQ_LABEL[tab]} tasks reset`, () => before.forEach((t) => actions.putTask(t)));
+    const freq = tab;
+    const period = freq === "daily" ? "day" : freq === "weekly" ? "week" : "month";
+    setConfirm({
+      title: `Reset ${freq} tasks?`,
+      message: `This unchecks every ${freq} task and subtask so you can start a new ${period}.`,
+      confirmLabel: "Reset",
+      onConfirm: () => {
+        const before = data.tasks.filter((t) => t.freq === freq);
+        actions.resetFreq(freq);
+        notify(`${FREQ_LABEL[freq]} tasks reset`, () => before.forEach((t) => actions.putTask(t)));
+      },
+    });
   };
 
   const importFile = async (file: File) => {
+    let next;
     try {
-      const next = parseBackup(JSON.parse(await file.text()));
-      if (!window.confirm(`Replace current data with this backup? (${next.tasks.length} tasks, ${next.invoices.length} invoices)`)) return;
-      const before = data;
-      actions.replaceAll(next);
-      notify("Backup imported", () => actions.replaceAll(before));
+      next = parseBackup(JSON.parse(await file.text()));
     } catch (e) {
-      window.alert(e instanceof Error && !(e instanceof SyntaxError) ? e.message : "Could not read this file.");
+      notify(e instanceof Error && !(e instanceof SyntaxError) ? e.message : "Couldn’t read this file. Choose a .json backup exported from this app.");
+      return;
     }
+    const before = data;
+    setConfirm({
+      title: "Import backup?",
+      message: `This replaces everything on this device with the backup (${next.tasks.length} tasks, ${next.invoices.length} invoices).`,
+      confirmLabel: "Replace data",
+      onConfirm: () => {
+        actions.replaceAll(next);
+        notify("Backup imported", () => actions.replaceAll(before));
+      },
+    });
   };
 
   if (!ready) {
@@ -206,6 +224,8 @@ export default function Home() {
           onClose={() => setSheet(null)}
         />
       )}
+
+      {confirm && <ConfirmSheet state={confirm} onClose={() => setConfirm(null)} />}
 
       <Toast toast={toast} onDismiss={dismissToast} />
     </main>
