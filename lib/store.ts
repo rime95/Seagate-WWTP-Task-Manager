@@ -26,7 +26,7 @@ export type NewTask = Omit<Task, "id">;
 function setCheck(d: AppData, taskId: string, key: string, fn: (c: Check) => Check): AppData {
   const byKey = d.checks[taskId] ?? {};
   const next = fn(byKey[key] ?? {});
-  const empty = !next.at && !next.subs?.length;
+  const empty = !next.at && !next.subs?.length && next.note === undefined;
   const updated = { ...byKey };
   if (empty) delete updated[key];
   else updated[key] = next;
@@ -95,6 +95,9 @@ export function useAppData() {
             return { ...c, subs: subs.includes(subId) ? subs.filter((s) => s !== subId) : [...subs, subId] };
           }),
         ),
+
+      /** Sets a weekly/monthly task's note for one period; later periods carry it forward. */
+      setPeriodNote: (taskId: string, key: string, note: string) => setData((d) => setCheck(d, taskId, key, (c) => ({ ...c, note }))),
 
       addInvoice: (name: string, month: string) =>
         setData((d) => ({ ...d, invoices: [...d.invoices, { id: uid(), name, month, sent: false }] })),

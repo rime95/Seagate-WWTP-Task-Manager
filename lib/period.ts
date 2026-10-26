@@ -101,4 +101,10 @@ export function onlyLabel(freq: Freq, key: string): string {
   return fmt(parseISODate(key + "-01"), { month: "short", year: "numeric" });
 }
 
+/** Where a carried-over note came from: "Week 44" or "Oct 2026" (named, since "last week" depends on the view). */
+export function carriedLabel(freq: Freq, key: string): string {
+  if (freq === "weekly") return `Week ${isoWeek(key)}`;
+  return fmt(parseISODate((freq === "monthly" ? key : key.slice(0, 7)) + "-01"), { month: "short", year: "numeric" });
+}
+
 export { addDays, mondayOf };

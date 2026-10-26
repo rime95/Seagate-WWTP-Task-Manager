@@ -24,6 +24,7 @@ export interface Task {
 export interface Check {
   at?: string; // ISO timestamp when the task was ticked; absent = not done
   subs?: string[]; // ids of ticked subtasks
+  note?: string; // weekly/monthly note for this period ("" = cleared); later periods inherit it until changed
 }
 
 export interface Subtask {
@@ -38,6 +39,10 @@ export interface TaskEntry extends Omit<Task, "subtasks"> {
   done: boolean;
   doneAt?: string;
   subtasks: Subtask[];
+  /** Weekly/monthly: the note for this period, or carried over from the latest earlier period that has one. */
+  periodNote?: string;
+  /** Period key the note was carried over from (absent when it was written for this period). */
+  noteFrom?: string;
 }
 
 export interface Invoice {

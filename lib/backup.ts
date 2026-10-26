@@ -80,6 +80,7 @@ export function parseBackup(raw: unknown): AppData {
         const check: Check = {};
         if (isStr(c.at)) check.at = c.at;
         if (Array.isArray(c.subs)) check.subs = c.subs.filter(isStr);
+        if (isStr(c.note)) check.note = c.note;
         checks[id][key] = check;
       }
     }

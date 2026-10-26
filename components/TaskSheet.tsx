@@ -24,18 +24,23 @@ interface Props {
   onSave: (t: TaskForm) => void;
   onDelete?: () => void;
   onClose: () => void;
+  /**
+   * Editing a weekly/monthly task from a dated view: the Notes field edits that period's note.
+   * `period` names it ("Week 44 · 26 Oct – 1 Nov"), `carriedFrom` says where an inherited note came from.
+   */
+  periodNote?: { value: string; period: string; unit: string; carriedFrom?: string };
 }
 
 const label = "mb-1.5 block text-xs font-semibold tracking-wide text-slate-500 uppercase dark:text-slate-400";
 const input =
   "w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-[15px] outline-none focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20 dark:border-slate-700 dark:bg-slate-950";
 
-export default function TaskSheet({ task, defaultFreq, defaultCategory, oneOffLabel, onSave, onDelete, onClose }: Props) {
+export default function TaskSheet({ task, defaultFreq, defaultCategory, oneOffLabel, onSave, onDelete, onClose, periodNote }: Props) {
   const [title, setTitle] = useState(task?.title ?? "");
   const [freq, setFreq] = useState<Freq>(task?.freq ?? defaultFreq);
   const [category, setCategory] = useState<Category>(task?.category ?? defaultCategory);
   const [high, setHigh] = useState(task?.priority === "high");
-  const [notes, setNotes] = useState(task?.notes ?? "");
+  const [notes, setNotes] = useState(periodNote ? periodNote.value : (task?.notes ?? ""));
   const [subtasks, setSubtasks] = useState(task?.subtasks ?? []);
   const [oneOff, setOneOff] = useState(!!task?.once);
   const [newSub, setNewSub] = useState("");
@@ -178,16 +183,22 @@ export default function TaskSheet({ task, defaultFreq, defaultCategory, oneOffLa
 
         <div>
           <label htmlFor="task-notes" className={label}>
-            Notes
+            {periodNote ? `Notes · ${periodNote.period}` : "Notes"}
           </label>
           <textarea
             id="task-notes"
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
             rows={2}
-            placeholder="Optional — supplier contact, PO no., etc."
+            placeholder={periodNote ? `What happened this ${periodNote.unit}? e.g. ordered 2 t polymer, PO 4512` : "Optional — supplier contact, PO no., etc."}
             className={input}
           />
+          {periodNote && (
+            <p className="mt-1.5 text-xs text-slate-500 dark:text-slate-400">
+              {periodNote.carriedFrom ? `Carried over from ${periodNote.carriedFrom}. ` : ""}
+              Saved for this {periodNote.unit} and carried forward to the next {periodNote.unit}s until you change it. Earlier {periodNote.unit}s keep their own note.
+            </p>
+          )}
         </div>
 
         <div className="flex gap-2 pt-1">

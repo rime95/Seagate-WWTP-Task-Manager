@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { onlyLabel } from "@/lib/period";
+import { carriedLabel, onlyLabel } from "@/lib/period";
 import { CATEGORY_STYLE, type TaskEntry } from "@/lib/types";
 import { shortTime } from "@/lib/util";
 import Checkbox from "./Checkbox";
@@ -20,6 +20,7 @@ export default function TaskItem({ task, onToggle, onToggleSubtask, onEdit, onDe
   const style = CATEGORY_STYLE[task.category];
   const subDone = task.subtasks.filter((s) => s.done).length;
   const hasSubs = task.subtasks.length > 0;
+  const note = task.freq === "daily" ? task.notes : task.periodNote;
 
   return (
     <li>
@@ -44,8 +45,13 @@ export default function TaskItem({ task, onToggle, onToggleSubtask, onEdit, onDe
                 {task.once && <span className="font-medium text-slate-500 dark:text-slate-400">📌 Only {onlyLabel(task.freq, task.once)}</span>}
                 {task.priority === "high" && !task.done && <span className="font-medium text-rose-600 dark:text-rose-400">⚑ High</span>}
                 {task.done && task.doneAt && <span className="text-emerald-600 dark:text-emerald-400">✓ {shortTime(task.doneAt)}</span>}
-                {task.notes && <span className="text-slate-400" title={task.notes}>📝</span>}
               </span>
+              {note && (
+                <span className="mt-1 line-clamp-2 block text-xs whitespace-pre-line text-slate-500 dark:text-slate-400">
+                  📝 {note}
+                  {task.noteFrom && <span className="text-slate-400 italic"> · carried from {carriedLabel(task.freq, task.noteFrom)}</span>}
+                </span>
+              )}
             </button>
 
             {hasSubs && (

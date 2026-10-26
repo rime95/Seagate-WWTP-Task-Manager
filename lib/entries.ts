@@ -1,6 +1,22 @@
 import { currentKey, periodRange, periodWhen } from "./period";
 import type { AppData, Freq, Task, TaskEntry } from "./types";
 
+/**
+ * Weekly and monthly tasks keep a note per period. A period without its own note shows the latest earlier
+ * period's note (carried forward); the task's base note is the fallback before any period note exists.
+ */
+export function periodNoteFor(data: AppData, task: Task, key: string): { note?: string; from?: string } {
+  if (task.freq === "daily") return {};
+  const byKey = data.checks[task.id] ?? {};
+  if (byKey[key]?.note !== undefined) return { note: byKey[key].note };
+  const earlier = Object.keys(byKey)
+    .filter((k) => k < key && byKey[k].note !== undefined)
+    .sort();
+  const from = earlier.at(-1);
+  if (from) return { note: byKey[from].note, from };
+  return { note: task.notes };
+}
+
 /** Does this task appear in the given period? */
 export function isVisible(task: Task, freq: Freq, key: string): boolean {
   if (task.freq !== freq) return false;
@@ -16,12 +32,15 @@ export function entriesFor(data: AppData, freq: Freq, key: string): TaskEntry[] 
     .map((t) => {
       const check = data.checks[t.id]?.[key];
       const subs = check?.subs ?? [];
+      const pn = periodNoteFor(data, t, key);
       return {
         ...t,
         periodKey: key,
         done: !!check?.at,
         doneAt: check?.at,
         subtasks: t.subtasks.map((s) => ({ ...s, done: subs.includes(s.id) })),
+        periodNote: pn.note || undefined,
+        noteFrom: pn.note ? pn.from : undefined,
       };
     });
 }

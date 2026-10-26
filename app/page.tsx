@@ -9,6 +9,7 @@ import InvoiceList from "@/components/InvoiceList";
 import InvoiceSheet from "@/components/InvoiceSheet";
 import PeriodPicker from "@/components/PeriodPicker";
 import ProgressBar from "@/components/ProgressBar";
+import SyncPromptSheet from "@/components/SyncPromptSheet";
 import PeriodSection from "@/components/PeriodSection";
 import QuickAdd from "@/components/QuickAdd";
 import Tabs from "@/components/Tabs";
@@ -18,14 +19,16 @@ import Toast, { type ToastState } from "@/components/Toast";
 import TodayStrip from "@/components/TodayStrip";
 import { exportData, parseBackup } from "@/lib/backup";
 import { currentEntries, entriesFor, periodStatus, type PeriodStatus } from "@/lib/entries";
-import { currentKey, onlyLabel, parseISODate, periodKey, periodRange, periodWhen } from "@/lib/period";
+import { carriedLabel, currentKey, onlyLabel, parseISODate, periodKey, periodLabel, periodRange, periodWhen } from "@/lib/period";
+import { clearAuthError, signIn, signOut, useAuth } from "@/lib/auth";
 import { useAppData } from "@/lib/store";
+import { useCloudSync } from "@/lib/useCloudSync";
 import type { Category, Freq, Invoice, Tab, Task, TaskEntry } from "@/lib/types";
 
 const TAB_KEY = "wwtp-tm-tab";
 const FREQS: Freq[] = ["daily", "weekly", "monthly"];
 
-type SheetState = { kind: "task"; task?: Task } | { kind: "invoice"; invoice?: Invoice } | { kind: "picker" } | null;
+type SheetState = { kind: "task"; task?: Task; entry?: TaskEntry } | { kind: "invoice"; invoice?: Invoice } | { kind: "picker" } | null;
 type Cursors = Record<Tab, string>;
 
 function currentCursors(): Cursors {
@@ -34,6 +37,8 @@ function currentCursors(): Cursors {
 
 export default function Home() {
   const { data, ready, saveError, actions } = useAppData();
+  const auth = useAuth();
+  const sync = useCloudSync(data, ready, auth.status === "signedIn" ? auth.account : null, actions.replaceAll);
   const [tab, setTab] = useState<Tab>("daily");
   const [cursors, setCursors] = useState<Cursors | null>(null);
   const [filter, setFilter] = useState<Category | "All">("All");
@@ -150,9 +155,15 @@ export default function Home() {
     notify("Invoice deleted", () => actions.putInvoice(i, index));
   };
 
-  const saveTask = (form: TaskForm, existing?: Task) => {
+  const saveTask = (form: TaskForm, existing?: Task, entry?: TaskEntry) => {
     const { oneOff, ...fields } = form;
-    if (existing) {
+    if (existing && entry && existing.freq !== "daily" && form.freq === existing.freq) {
+      // The Notes field edited this week's/month's note, not the task's base note.
+      const { notes, ...rest } = fields;
+      if ((notes ?? "") !== (entry.periodNote ?? "")) actions.setPeriodNote(existing.id, entry.periodKey, notes ?? "");
+      const once = oneOff ? (existing.once ?? keyFor(form.freq)) : undefined;
+      actions.updateTask(existing.id, { ...rest, once });
+    } else if (existing) {
       const once = oneOff ? (existing.once && existing.freq === form.freq ? existing.once : keyFor(form.freq)) : undefined;
       actions.updateTask(existing.id, { ...fields, once });
     } else {
@@ -186,7 +197,7 @@ export default function Home() {
   const listHandlers = {
     onToggle: toggleTask,
     onToggleSubtask: (t: TaskEntry, sid: string) => actions.toggleSubtask(t.id, t.periodKey, sid),
-    onEdit: (t: TaskEntry) => setSheet({ kind: "task", task: data.tasks.find((x) => x.id === t.id) }),
+    onEdit: (t: TaskEntry) => setSheet({ kind: "task", task: data.tasks.find((x) => x.id === t.id), entry: t }),
     onDelete: (t: TaskEntry) => deleteTask(t.id),
   };
   const emptyText =
@@ -198,9 +209,18 @@ export default function Home() {
 
   return (
     <main className="mx-auto min-h-dvh max-w-xl px-4 pb-32">
-      <Header onExport={() => exportData(data)} onImport={importFile} />
+      <Header auth={auth} sync={sync} onSignIn={signIn} onSignOut={signOut} onExport={() => exportData(data)} onImport={importFile} />
 
       <Tabs active={tab} counts={counts} onChange={changeTab} />
+
+      {auth.error && (
+        <p className="mt-2 flex items-start gap-2 rounded-lg bg-rose-100 px-3 py-2 text-sm text-rose-800 dark:bg-rose-950 dark:text-rose-200">
+          <span className="flex-1">{auth.error}</span>
+          <button type="button" onClick={clearAuthError} aria-label="Dismiss" className="font-semibold">
+            ✕
+          </button>
+        </p>
+      )}
 
       {saveError && (
         <p className="mt-2 rounded-lg bg-rose-100 px-3 py-2 text-sm text-rose-800 dark:bg-rose-950 dark:text-rose-200">
@@ -285,7 +305,17 @@ export default function Home() {
           defaultFreq={isTaskTab ? tab : "daily"}
           defaultCategory={filter === "All" ? "Other" : filter}
           oneOffLabel={(f) => onlyLabel(f, sheet.task?.once && sheet.task.freq === f ? sheet.task.once : keyFor(f))}
-          onSave={(form) => saveTask(form, sheet.task)}
+          onSave={(form) => saveTask(form, sheet.task, sheet.entry)}
+          periodNote={
+            sheet.task && sheet.entry && sheet.task.freq !== "daily"
+              ? {
+                  value: sheet.entry.periodNote ?? "",
+                  period: periodLabel(sheet.task.freq, sheet.entry.periodKey),
+                  unit: sheet.task.freq === "weekly" ? "week" : "month",
+                  carriedFrom: sheet.entry.noteFrom ? carriedLabel(sheet.task.freq, sheet.entry.noteFrom) : undefined,
+                }
+              : undefined
+          }
           onDelete={sheet.task ? () => deleteTask(sheet.task!.id) : undefined}
           onClose={() => setSheet(null)}
         />
@@ -303,6 +333,7 @@ export default function Home() {
           onClose={() => setSheet(null)}
         />
       )}
+      {sync.prompt && !sheet && <SyncPromptSheet prompt={sync.prompt} busy={sync.busy} error={sync.error} onChoose={sync.resolve} />}
       {confirm && <ConfirmSheet state={confirm} onClose={() => setConfirm(null)} />}
 
       <Toast toast={toast} onDismiss={dismissToast} />
