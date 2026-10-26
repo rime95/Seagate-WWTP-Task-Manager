@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import type { Task } from "@/lib/types";
+import type { TaskEntry as Task } from "@/lib/types";
 import TaskItem from "./TaskItem";
 
 interface Props {

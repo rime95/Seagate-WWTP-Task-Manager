@@ -3,39 +3,67 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import CategoryFilter from "@/components/CategoryFilter";
 import ConfirmSheet, { type ConfirmState } from "@/components/ConfirmSheet";
+import DateNav from "@/components/DateNav";
 import Header from "@/components/Header";
 import InvoiceList from "@/components/InvoiceList";
 import InvoiceSheet from "@/components/InvoiceSheet";
+import PeriodPicker from "@/components/PeriodPicker";
 import ProgressBar from "@/components/ProgressBar";
 import QuickAdd from "@/components/QuickAdd";
 import Tabs from "@/components/Tabs";
 import TaskList from "@/components/TaskList";
-import TaskSheet from "@/components/TaskSheet";
+import TaskSheet, { type TaskForm } from "@/components/TaskSheet";
 import Toast, { type ToastState } from "@/components/Toast";
 import TodayStrip from "@/components/TodayStrip";
 import { exportData, parseBackup } from "@/lib/backup";
+import { currentEntries, entriesFor, periodStatus, type PeriodStatus } from "@/lib/entries";
+import { currentKey, onlyLabel, parseISODate, periodKey, periodRange, periodWhen } from "@/lib/period";
 import { useAppData } from "@/lib/store";
-import { FREQ_LABEL, type Category, type Freq, type Invoice, type Tab, type Task } from "@/lib/types";
-import { currentMonth } from "@/lib/util";
+import type { Category, Freq, Invoice, Tab, Task, TaskEntry } from "@/lib/types";
 
 const TAB_KEY = "wwtp-tm-tab";
+const FREQS: Freq[] = ["daily", "weekly", "monthly"];
 
-type SheetState = { kind: "task"; task?: Task } | { kind: "invoice"; invoice?: Invoice } | null;
+type SheetState = { kind: "task"; task?: Task } | { kind: "invoice"; invoice?: Invoice } | { kind: "picker" } | null;
+type Cursors = Record<Tab, string>;
+
+function currentCursors(): Cursors {
+  return { daily: currentKey("daily"), weekly: currentKey("weekly"), monthly: currentKey("monthly"), invoices: currentKey("monthly") };
+}
 
 export default function Home() {
   const { data, ready, saveError, actions } = useAppData();
   const [tab, setTab] = useState<Tab>("daily");
+  const [cursors, setCursors] = useState<Cursors | null>(null);
   const [filter, setFilter] = useState<Category | "All">("All");
   const [sheet, setSheet] = useState<SheetState>(null);
   const [toast, setToast] = useState<ToastState | null>(null);
   const [confirm, setConfirm] = useState<ConfirmState | null>(null);
 
+  // Dates depend on the device clock, so they are set after mount (not at build time).
   useEffect(() => {
+    setCursors(currentCursors());
     try {
       const saved = localStorage.getItem(TAB_KEY) as Tab | null;
       if (saved && ["daily", "weekly", "monthly", "invoices"].includes(saved)) setTab(saved);
     } catch {}
+
+    // If the app stays open past midnight, move views that were on "today" to the new today.
+    let last = currentCursors();
+    const onVisible = () => {
+      if (document.visibilityState !== "visible") return;
+      const now = currentCursors();
+      setCursors((c) => c && (Object.fromEntries(Object.entries(c).map(([k, v]) => [k, v === last[k as Tab] ? now[k as Tab] : v])) as Cursors));
+      last = now;
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
   }, []);
+
+  // A sheet covers the bottom of the screen, so drop any pending toast when one opens.
+  useEffect(() => {
+    if (sheet || confirm) setToast(null);
+  }, [sheet, confirm]);
 
   const changeTab = (t: Tab) => {
     setTab(t);
@@ -48,34 +76,63 @@ export default function Home() {
   const notify = useCallback((message: string, onUndo?: () => void) => setToast({ id: Date.now(), message, onUndo }), []);
   const dismissToast = useCallback(() => setToast(null), []);
 
-  const counts = useMemo(() => {
-    const open = (f: Freq) => data.tasks.filter((t) => t.freq === f && !t.done).length;
-    return {
-      daily: open("daily"),
-      weekly: open("weekly"),
-      monthly: open("monthly"),
-      invoices: data.invoices.filter((i) => !i.sent).length,
-    };
-  }, [data]);
+  const nowEntries = useMemo(
+    () => Object.fromEntries(FREQS.map((f) => [f, currentEntries(data, f)])) as Record<Freq, TaskEntry[]>,
+    [data],
+  );
+  const thisMonth = currentKey("monthly");
+  const unsentInvoices = data.invoices.filter((i) => !i.sent && i.month <= thisMonth);
+  const counts: Record<Tab, number> = {
+    daily: nowEntries.daily.filter((e) => !e.done).length,
+    weekly: nowEntries.weekly.filter((e) => !e.done).length,
+    monthly: nowEntries.monthly.filter((e) => !e.done).length,
+    invoices: unsentInvoices.length,
+  };
 
-  const focusTasks = data.tasks.filter((t) => t.priority === "high" && !t.done);
+  if (!ready || !cursors) {
+    return <main className="mx-auto min-h-dvh max-w-xl px-4" />;
+  }
+
   const isTaskTab = tab !== "invoices";
-  const tabTasks = isTaskTab ? data.tasks.filter((t) => t.freq === tab) : [];
-  const visibleTasks = filter === "All" ? tabTasks : tabTasks.filter((t) => t.category === filter);
-  const categoryCounts = tabTasks.reduce<Partial<Record<Category, number>>>((acc, t) => {
+  const navFreq: Freq = isTaskTab ? tab : "monthly";
+  const key = cursors[tab];
+  const setKey = (k: string) => setCursors({ ...cursors, [tab]: k });
+  const viewingNow = periodWhen(navFreq, key) === 0;
+
+  const entries = isTaskTab ? entriesFor(data, tab, key) : [];
+  const visible = filter === "All" ? entries : entries.filter((t) => t.category === filter);
+  const categoryCounts = entries.reduce<Partial<Record<Category, number>>>((acc, t) => {
     acc[t.category] = (acc[t.category] ?? 0) + 1;
     return acc;
   }, {});
 
-  // --- Task actions with Undo ---
-  const toggleTask = (t: Task) => {
-    actions.toggleTask(t.id);
-    if (!t.done) notify(`Done: ${t.title}`, () => actions.putTask(t));
+  // The period (in any tab's frequency) that contains the first day of what is on screen.
+  const viewedDay = parseISODate(periodRange(navFreq, key).start);
+  const keyFor = (f: Freq) => periodKey(f, viewedDay);
+
+  const monthInvoices = data.invoices.filter((i) => i.month === key);
+  const earlierUnsent = data.invoices.filter((i) => !i.sent && i.month < key);
+
+  const statusOf = (k: string): PeriodStatus => {
+    if (isTaskTab) return periodStatus(data, tab, k);
+    const list = data.invoices.filter((i) => i.month === k);
+    if (!list.length) return "none";
+    if (list.every((i) => i.sent)) return "done";
+    return periodWhen("monthly", k) < 0 ? "missed" : "open";
   };
-  const deleteTask = (t: Task) => {
-    const index = data.tasks.findIndex((x) => x.id === t.id);
-    actions.deleteTask(t.id);
-    notify("Task deleted", () => actions.putTask(t, index));
+
+  // --- Actions with Undo ---
+  const toggleTask = (e: TaskEntry) => {
+    actions.toggleTask(e.id, e.periodKey);
+    if (!e.done) notify(`Done: ${e.title}`, () => actions.toggleTask(e.id, e.periodKey));
+  };
+  const deleteTask = (id: string) => {
+    const index = data.tasks.findIndex((x) => x.id === id);
+    const original = data.tasks[index];
+    if (!original) return;
+    const keepsHistory = !original.once && Object.keys(data.checks[id] ?? {}).length > 0;
+    actions.removeTask(id);
+    notify(keepsHistory ? "Removed from today on (past days kept)" : "Task deleted", () => actions.putTask(original, index));
   };
   const toggleInvoice = (i: Invoice) => {
     actions.toggleInvoice(i.id);
@@ -87,20 +144,15 @@ export default function Home() {
     notify("Invoice deleted", () => actions.putInvoice(i, index));
   };
 
-  const resetTab = () => {
-    if (!isTaskTab) return;
-    const freq = tab;
-    const period = freq === "daily" ? "day" : freq === "weekly" ? "week" : "month";
-    setConfirm({
-      title: `Reset ${freq} tasks?`,
-      message: `This unchecks every ${freq} task and subtask so you can start a new ${period}.`,
-      confirmLabel: "Reset",
-      onConfirm: () => {
-        const before = data.tasks.filter((t) => t.freq === freq);
-        actions.resetFreq(freq);
-        notify(`${FREQ_LABEL[freq]} tasks reset`, () => before.forEach((t) => actions.putTask(t)));
-      },
-    });
+  const saveTask = (form: TaskForm, existing?: Task) => {
+    const { oneOff, ...fields } = form;
+    if (existing) {
+      const once = oneOff ? (existing.once && existing.freq === form.freq ? existing.once : keyFor(form.freq)) : undefined;
+      actions.updateTask(existing.id, { ...fields, once });
+    } else {
+      const k = keyFor(form.freq);
+      actions.addTask({ ...fields, start: periodRange(form.freq, k).start, once: oneOff ? k : undefined });
+    }
   };
 
   const importFile = async (file: File) => {
@@ -123,18 +175,17 @@ export default function Home() {
     });
   };
 
-  if (!ready) {
-    return <main className="mx-auto min-h-dvh max-w-xl px-4" />;
-  }
+  const focus = FREQS.flatMap((f) => nowEntries[f].filter((e) => e.priority === "high" && !e.done));
+  const emptyText =
+    filter !== "All"
+      ? `No ${filter} tasks here.`
+      : periodWhen(navFreq, key) < 0
+        ? "No tasks were scheduled for this period."
+        : `No ${tab} tasks yet. Add one above.`;
 
   return (
     <main className="mx-auto min-h-dvh max-w-xl px-4 pb-32">
-      <Header
-        onExport={() => exportData(data)}
-        onImport={importFile}
-        onReset={isTaskTab ? resetTab : undefined}
-        resetLabel={isTaskTab ? `Reset ${FREQ_LABEL[tab].toLowerCase()} tasks` : undefined}
-      />
+      <Header onExport={() => exportData(data)} onImport={importFile} />
 
       <Tabs active={tab} counts={counts} onChange={changeTab} />
 
@@ -144,41 +195,59 @@ export default function Home() {
         </p>
       )}
 
-      <div className="mt-3 space-y-4">
-        <TodayStrip
-          tasks={focusTasks}
-          unsentInvoices={tab === "invoices" ? 0 : counts.invoices}
-          onToggle={(id) => {
-            const t = data.tasks.find((x) => x.id === id);
-            if (t) toggleTask(t);
-          }}
-          onOpenInvoices={() => changeTab("invoices")}
-        />
+      <div className="mt-2 space-y-4">
+        <DateNav freq={navFreq} value={key} onChange={setKey} onOpenPicker={() => setSheet({ kind: "picker" })} />
+
+        {isTaskTab && viewingNow && (
+          <TodayStrip
+            tasks={focus}
+            unsentInvoices={unsentInvoices.length}
+            onToggle={toggleTask}
+            onOpenInvoices={() => changeTab("invoices")}
+          />
+        )}
 
         {isTaskTab ? (
           <>
             <QuickAdd
-              placeholder={`Add a ${tab} task…`}
+              key={`${tab}-${key}`}
+              placeholder={viewingNow ? `Add a ${tab} task…` : `Add a ${tab} task (starts ${onlyLabel(tab, key)})…`}
               onAdd={(title) =>
-                actions.addTask({ title, freq: tab, category: filter === "All" ? "Other" : filter, priority: "normal", subtasks: [] })
+                actions.addTask({
+                  title,
+                  freq: tab,
+                  category: filter === "All" ? "Other" : filter,
+                  priority: "normal",
+                  subtasks: [],
+                  start: periodRange(tab, key).start,
+                })
               }
             />
-            {tabTasks.length > 0 && <ProgressBar done={tabTasks.filter((t) => t.done).length} total={tabTasks.length} />}
+            {entries.length > 0 && <ProgressBar done={entries.filter((t) => t.done).length} total={entries.length} />}
             <CategoryFilter value={filter} counts={categoryCounts} onChange={setFilter} />
             <TaskList
-              tasks={visibleTasks}
-              emptyText={filter === "All" ? `No ${tab} tasks yet. Add one above.` : `No ${filter} tasks here.`}
+              tasks={visible}
+              emptyText={emptyText}
               onToggle={toggleTask}
-              onToggleSubtask={(t, sid) => actions.toggleSubtask(t.id, sid)}
-              onEdit={(t) => setSheet({ kind: "task", task: t })}
-              onDelete={deleteTask}
+              onToggleSubtask={(t, sid) => actions.toggleSubtask(t.id, t.periodKey, sid)}
+              onEdit={(t) => setSheet({ kind: "task", task: data.tasks.find((x) => x.id === t.id) })}
+              onDelete={(t) => deleteTask(t.id)}
             />
           </>
         ) : (
           <>
-            <QuickAdd placeholder="Add an invoice (this month)…" onAdd={(name) => actions.addInvoice(name, currentMonth())} />
+            {earlierUnsent.length > 0 && (
+              <button
+                type="button"
+                onClick={() => setKey(earlierUnsent.map((i) => i.month).sort().at(-1)!)}
+                className="w-full rounded-xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-left text-sm font-medium text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-200"
+              >
+                ⚠ {earlierUnsent.length} invoice{earlierUnsent.length > 1 ? "s" : ""} from earlier months not sent yet →
+              </button>
+            )}
+            <QuickAdd key={key} placeholder={`Add an invoice for ${onlyLabel("monthly", key)}…`} onAdd={(name) => actions.addInvoice(name, key)} />
             <InvoiceList
-              invoices={data.invoices}
+              invoices={monthInvoices}
               onToggle={toggleInvoice}
               onEdit={(i) => setSheet({ kind: "invoice", invoice: i })}
               onDelete={deleteInvoice}
@@ -198,23 +267,24 @@ export default function Home() {
         </svg>
       </button>
 
+      {sheet?.kind === "picker" && (
+        <PeriodPicker freq={navFreq} value={key} statusOf={statusOf} onPick={setKey} onClose={() => setSheet(null)} />
+      )}
       {sheet?.kind === "task" && (
         <TaskSheet
           task={sheet.task}
           defaultFreq={isTaskTab ? tab : "daily"}
           defaultCategory={filter === "All" ? "Other" : filter}
-          onSave={(t) => {
-            const existing = sheet.task;
-            if (existing) actions.updateTask(existing.id, t);
-            else actions.addTask(t);
-          }}
-          onDelete={sheet.task ? () => deleteTask(sheet.task!) : undefined}
+          oneOffLabel={(f) => onlyLabel(f, sheet.task?.once && sheet.task.freq === f ? sheet.task.once : keyFor(f))}
+          onSave={(form) => saveTask(form, sheet.task)}
+          onDelete={sheet.task ? () => deleteTask(sheet.task!.id) : undefined}
           onClose={() => setSheet(null)}
         />
       )}
       {sheet?.kind === "invoice" && (
         <InvoiceSheet
           invoice={sheet.invoice}
+          defaultMonth={key}
           onSave={(name, month) => {
             const existing = sheet.invoice;
             if (existing) actions.updateInvoice(existing.id, { name, month });
@@ -224,7 +294,6 @@ export default function Home() {
           onClose={() => setSheet(null)}
         />
       )}
-
       {confirm && <ConfirmSheet state={confirm} onClose={() => setConfirm(null)} />}
 
       <Toast toast={toast} onDismiss={dismissToast} />

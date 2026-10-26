@@ -6,14 +6,16 @@ It is a Next.js web app that runs on phone and PC. It can be installed to the ho
 
 ## Features
 - **Daily / Weekly / Monthly tabs.** Each tab shows a count of open tasks, a progress bar and a category filter (Chemical, Roster, Report, Invoice, Operations, Other).
+- **Go from date to date.** Use ‹ › to step one day, week (Mon–Sun) or month, and **Today** / **This week** / **This month** to jump back. Tap the date to open a calendar. In the calendar, a green dot means everything was done and a red dot means something was missed.
+- **Ticks are saved per date.** Your task list repeats every period, but each day, week or month has its own ticks. A new period starts unticked, and past periods keep their history.
+- **One-off tasks.** Turn on 📌 *One-off task* to make a task appear only on the day, week or month you are viewing.
 - **Starter tasks** for chemical orders, roster, invoices and the monthly report. You can edit or delete any of them.
 - **Quick-add bar.** Type a task and press Enter. If a category filter is active, the new task gets that category.
 - **Subtasks.** For example, the monthly report sections or each chemical to check.
 - **High priority flag**, plus a **Focus** strip at the top that collects high-priority open tasks from every tab.
-- **Invoices tab.** A plain "sent to Finance?" checklist grouped by month. Ticking an invoice records the date it was sent.
+- **Invoices tab.** A plain "sent to Finance?" checklist per month, with ‹ › to change month. Ticking an invoice records the date it was sent. A banner warns you about unsent invoices from earlier months.
 - **Swipe gestures** on phone: swipe right to mark done, swipe left to delete. On PC, use the buttons instead.
-- **Undo toast** after you complete, delete or reset.
-- **Manual reset.** Use ⋮ → *Reset daily/weekly/monthly tasks* to uncheck everything at the start of a new period.
+- **Undo toast** after you complete or delete something. Deleting a repeating task that has history removes it from today onward, and past days still show it.
 - **Backup.** Use ⋮ → *Export backup* to save a `.json` file, and ⋮ → *Import backup* to restore it on any device.
 - Light and dark mode follow your phone or PC setting.
 

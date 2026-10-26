@@ -3,15 +3,6 @@ export function uid(): string {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
 }
 
-export function currentMonth(d = new Date()): string {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-}
-
-export function monthLabel(month: string): string {
-  const [y, m] = month.split("-").map(Number);
-  return new Date(y, m - 1, 1).toLocaleDateString(undefined, { month: "long", year: "numeric" });
-}
-
 export function shortTime(iso?: string): string {
   if (!iso) return "";
   const d = new Date(iso);

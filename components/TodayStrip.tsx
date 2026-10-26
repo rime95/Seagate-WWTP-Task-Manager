@@ -1,13 +1,13 @@
 "use client";
 
 import { useState } from "react";
-import { FREQ_LABEL, type Task } from "@/lib/types";
+import { FREQ_LABEL, type TaskEntry } from "@/lib/types";
 import Checkbox from "./Checkbox";
 
 interface Props {
-  tasks: Task[]; // open, high-priority tasks from all tabs
+  tasks: TaskEntry[]; // open, high-priority tasks in the current day/week/month
   unsentInvoices: number;
-  onToggle: (id: string) => void;
+  onToggle: (t: TaskEntry) => void;
   onOpenInvoices: () => void;
 }
 
@@ -26,7 +26,7 @@ export default function TodayStrip({ tasks, unsentInvoices, onToggle, onOpenInvo
         className="flex w-full items-center justify-between px-4 py-2.5 text-left"
       >
         <span className="text-sm font-semibold text-amber-900 dark:text-amber-200">
-          ★ Focus{tasks.length > 0 && ` · ${tasks.length} high-priority open`}
+          ★ Today’s focus{tasks.length > 0 && ` · ${tasks.length} high-priority open`}
         </span>
         <svg viewBox="0 0 20 20" className={`h-4 w-4 text-amber-700 transition-transform ${open ? "rotate-180" : ""}`} fill="currentColor">
           <path d="M5 8l5 5 5-5H5z" />
@@ -36,7 +36,7 @@ export default function TodayStrip({ tasks, unsentInvoices, onToggle, onOpenInvo
         <ul className="space-y-2 px-4 pb-3">
           {tasks.map((t) => (
             <li key={t.id} className="flex items-center gap-2.5">
-              <Checkbox size="sm" checked={false} onChange={() => onToggle(t.id)} label={`Mark "${t.title}" done`} />
+              <Checkbox size="sm" checked={false} onChange={() => onToggle(t)} label={`Mark "${t.title}" done`} />
               <span className="flex-1 text-sm">{t.title}</span>
               <span className="text-xs text-amber-700/80 dark:text-amber-300/70">{FREQ_LABEL[t.freq]}</span>
             </li>

@@ -1,13 +1,14 @@
 "use client";
 
 import { useState } from "react";
-import { CATEGORY_STYLE, type Task } from "@/lib/types";
+import { onlyLabel } from "@/lib/period";
+import { CATEGORY_STYLE, type TaskEntry } from "@/lib/types";
 import { shortTime } from "@/lib/util";
 import Checkbox from "./Checkbox";
 import SwipeRow from "./SwipeRow";
 
 interface Props {
-  task: Task;
+  task: TaskEntry;
   onToggle: () => void;
   onToggleSubtask: (subId: string) => void;
   onEdit: () => void;
@@ -40,6 +41,7 @@ export default function TaskItem({ task, onToggle, onToggleSubtask, onEdit, onDe
               </span>
               <span className="mt-1 flex flex-wrap items-center gap-1.5 text-xs">
                 <span className={`rounded-full px-2 py-0.5 font-medium ${style.chip}`}>{task.category}</span>
+                {task.once && <span className="font-medium text-slate-500 dark:text-slate-400">📌 Only {onlyLabel(task.freq, task.once)}</span>}
                 {task.priority === "high" && !task.done && <span className="font-medium text-rose-600 dark:text-rose-400">⚑ High</span>}
                 {task.done && task.doneAt && <span className="text-emerald-600 dark:text-emerald-400">✓ {shortTime(task.doneAt)}</span>}
                 {task.notes && <span className="text-slate-400" title={task.notes}>📝</span>}

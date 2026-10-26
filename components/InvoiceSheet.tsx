@@ -2,11 +2,11 @@
 
 import { useState } from "react";
 import type { Invoice } from "@/lib/types";
-import { currentMonth } from "@/lib/util";
 import Sheet from "./Sheet";
 
 interface Props {
   invoice?: Invoice;
+  defaultMonth: string;
   onSave: (name: string, month: string) => void;
   onDelete?: () => void;
   onClose: () => void;
@@ -16,9 +16,9 @@ const label = "mb-1.5 block text-xs font-semibold tracking-wide text-slate-500 u
 const input =
   "w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-[15px] outline-none focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20 dark:border-slate-700 dark:bg-slate-950";
 
-export default function InvoiceSheet({ invoice, onSave, onDelete, onClose }: Props) {
+export default function InvoiceSheet({ invoice, defaultMonth, onSave, onDelete, onClose }: Props) {
   const [name, setName] = useState(invoice?.name ?? "");
-  const [month, setMonth] = useState(invoice?.month ?? currentMonth());
+  const [month, setMonth] = useState(invoice?.month ?? defaultMonth);
 
   return (
     <Sheet title={invoice ? "Edit invoice" : "New invoice"} onClose={onClose}>

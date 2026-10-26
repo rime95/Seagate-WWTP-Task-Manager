@@ -6,12 +6,7 @@ export type Category = (typeof CATEGORIES)[number];
 
 export type Priority = "normal" | "high";
 
-export interface Subtask {
-  id: string;
-  title: string;
-  done: boolean;
-}
-
+/** A task template. Ticks are stored per period in AppData.checks, not on the task. */
 export interface Task {
   id: string;
   title: string;
@@ -19,9 +14,30 @@ export interface Task {
   category: Category;
   priority: Priority;
   notes?: string;
-  subtasks: Subtask[];
+  subtasks: { id: string; title: string }[];
+  start: string; // "YYYY-MM-DD": first day the task appears
+  end?: string; // "YYYY-MM-DD": removed on this day (kept for history before it)
+  once?: string; // one-off task: the only period key it appears in
+}
+
+/** Tick state of one task in one period. */
+export interface Check {
+  at?: string; // ISO timestamp when the task was ticked; absent = not done
+  subs?: string[]; // ids of ticked subtasks
+}
+
+export interface Subtask {
+  id: string;
+  title: string;
   done: boolean;
-  doneAt?: string; // ISO timestamp
+}
+
+/** A task as shown for one period (template + that period's ticks). */
+export interface TaskEntry extends Omit<Task, "subtasks"> {
+  periodKey: string;
+  done: boolean;
+  doneAt?: string;
+  subtasks: Subtask[];
 }
 
 export interface Invoice {
@@ -33,8 +49,9 @@ export interface Invoice {
 }
 
 export interface AppData {
-  version: 1;
+  version: 2;
   tasks: Task[];
+  checks: Record<string, Record<string, Check>>; // taskId → periodKey → Check
   invoices: Invoice[];
 }
 

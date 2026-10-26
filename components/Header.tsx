@@ -5,11 +5,9 @@ import { useEffect, useRef, useState } from "react";
 interface Props {
   onExport: () => void;
   onImport: (file: File) => void;
-  onReset?: () => void;
-  resetLabel?: string;
 }
 
-export default function Header({ onExport, onImport, onReset, resetLabel }: Props) {
+export default function Header({ onExport, onImport }: Props) {
   const [open, setOpen] = useState(false);
   const [today, setToday] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
@@ -56,11 +54,6 @@ export default function Header({ onExport, onImport, onReset, resetLabel }: Prop
         </button>
         {open && (
           <div className="animate-fade-in absolute right-0 z-30 mt-1 w-56 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-lg dark:border-slate-700 dark:bg-slate-900">
-            {onReset && (
-              <button type="button" className={item} onClick={() => { setOpen(false); onReset(); }}>
-                ↺ {resetLabel}
-              </button>
-            )}
             <button type="button" className={item} onClick={() => { setOpen(false); onExport(); }}>
               ⬇ Export backup
             </button>

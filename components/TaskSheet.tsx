@@ -1,16 +1,27 @@
 "use client";
 
 import { useState } from "react";
-import type { NewTask } from "@/lib/store";
-import { CATEGORIES, CATEGORY_STYLE, FREQ_LABEL, type Category, type Freq, type Subtask, type Task } from "@/lib/types";
+import { CATEGORIES, CATEGORY_STYLE, FREQ_LABEL, type Category, type Freq, type Priority, type Task } from "@/lib/types";
 import { uid } from "@/lib/util";
 import Sheet from "./Sheet";
+
+export interface TaskForm {
+  title: string;
+  freq: Freq;
+  category: Category;
+  priority: Priority;
+  notes?: string;
+  subtasks: { id: string; title: string }[];
+  oneOff: boolean;
+}
 
 interface Props {
   task?: Task; // undefined = new task
   defaultFreq: Freq;
   defaultCategory: Category;
-  onSave: (t: NewTask) => void;
+  /** e.g. "today", "28 Oct", "this week": the period a one-off task would belong to. */
+  oneOffLabel: (freq: Freq) => string;
+  onSave: (t: TaskForm) => void;
   onDelete?: () => void;
   onClose: () => void;
 }
@@ -19,19 +30,20 @@ const label = "mb-1.5 block text-xs font-semibold tracking-wide text-slate-500 u
 const input =
   "w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-[15px] outline-none focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20 dark:border-slate-700 dark:bg-slate-950";
 
-export default function TaskSheet({ task, defaultFreq, defaultCategory, onSave, onDelete, onClose }: Props) {
+export default function TaskSheet({ task, defaultFreq, defaultCategory, oneOffLabel, onSave, onDelete, onClose }: Props) {
   const [title, setTitle] = useState(task?.title ?? "");
   const [freq, setFreq] = useState<Freq>(task?.freq ?? defaultFreq);
   const [category, setCategory] = useState<Category>(task?.category ?? defaultCategory);
   const [high, setHigh] = useState(task?.priority === "high");
   const [notes, setNotes] = useState(task?.notes ?? "");
-  const [subtasks, setSubtasks] = useState<Subtask[]>(task?.subtasks ?? []);
+  const [subtasks, setSubtasks] = useState(task?.subtasks ?? []);
+  const [oneOff, setOneOff] = useState(!!task?.once);
   const [newSub, setNewSub] = useState("");
 
   const addSub = () => {
     const v = newSub.trim();
     if (!v) return;
-    setSubtasks((s) => [...s, { id: uid(), title: v, done: false }]);
+    setSubtasks((s) => [...s, { id: uid(), title: v }]);
     setNewSub("");
   };
 
@@ -39,7 +51,7 @@ export default function TaskSheet({ task, defaultFreq, defaultCategory, onSave, 
     e.preventDefault();
     if (!title.trim()) return;
     // Include a subtask that was typed but not yet added.
-    const pending = newSub.trim() ? [{ id: uid(), title: newSub.trim(), done: false }] : [];
+    const pending = newSub.trim() ? [{ id: uid(), title: newSub.trim() }] : [];
     onSave({
       title: title.trim(),
       freq,
@@ -47,6 +59,7 @@ export default function TaskSheet({ task, defaultFreq, defaultCategory, onSave, 
       priority: high ? "high" : "normal",
       notes: notes.trim() || undefined,
       subtasks: [...subtasks.map((s) => ({ ...s, title: s.title.trim() })).filter((s) => s.title), ...pending],
+      oneOff,
     });
     onClose();
   };
@@ -69,7 +82,7 @@ export default function TaskSheet({ task, defaultFreq, defaultCategory, onSave, 
         </div>
 
         <div>
-          <span className={label}>Repeats</span>
+          <span className={label}>{oneOff ? "Tab" : "Repeats"}</span>
           <div className="grid grid-cols-3 gap-1 rounded-lg bg-slate-100 p-1 dark:bg-slate-800">
             {(Object.keys(FREQ_LABEL) as Freq[]).map((f) => (
               <button
@@ -85,6 +98,16 @@ export default function TaskSheet({ task, defaultFreq, defaultCategory, onSave, 
             ))}
           </div>
         </div>
+
+        <label className="flex cursor-pointer items-center justify-between gap-3 rounded-lg border border-slate-200 px-3 py-2.5 dark:border-slate-700">
+          <span>
+            <span className="block text-sm font-medium">📌 One-off task</span>
+            <span className="block text-xs text-slate-500 dark:text-slate-400">
+              {oneOff ? `Only ${oneOffLabel(freq)}, doesn't repeat` : `Repeats every ${freq === "daily" ? "day" : freq.replace("ly", "")}`}
+            </span>
+          </span>
+          <input type="checkbox" checked={oneOff} onChange={(e) => setOneOff(e.target.checked)} className="h-5 w-5 accent-cyan-600" />
+        </label>
 
         <div>
           <span className={label}>Category</span>
