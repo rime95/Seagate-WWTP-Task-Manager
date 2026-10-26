@@ -8,6 +8,7 @@ It is a Next.js web app that runs on phone and PC. It can be installed to the ho
 - **Daily / Weekly / Monthly tabs.** Each tab shows a count of open tasks, a progress bar and a category filter (Chemical, Roster, Report, Invoice, Operations, Other).
 - **Go from date to date.** Use ‹ › to step one day, week (Mon–Sun) or month, and **Today** / **This week** / **This month** to jump back. Tap the date to open a calendar. In the calendar, a green dot means everything was done and a red dot means something was missed.
 - **Ticks are saved per date.** Your task list repeats every period, but each day, week or month has its own ticks. A new period starts unticked, and past periods keep their history.
+- **Daily tab shows the whole picture.** Under the day's tasks it also lists that week's weekly tasks and that month's monthly tasks. Ticking one there ticks it for the whole week or month, so it shows as done on every date in that period.
 - **One-off tasks.** Turn on 📌 *One-off task* to make a task appear only on the day, week or month you are viewing.
 - **Starter tasks** for chemical orders, roster, invoices and the monthly report. You can edit or delete any of them.
 - **Quick-add bar.** Type a task and press Enter. If a category filter is active, the new task gets that category.

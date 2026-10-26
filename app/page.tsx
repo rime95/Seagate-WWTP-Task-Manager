@@ -9,6 +9,7 @@ import InvoiceList from "@/components/InvoiceList";
 import InvoiceSheet from "@/components/InvoiceSheet";
 import PeriodPicker from "@/components/PeriodPicker";
 import ProgressBar from "@/components/ProgressBar";
+import PeriodSection from "@/components/PeriodSection";
 import QuickAdd from "@/components/QuickAdd";
 import Tabs from "@/components/Tabs";
 import TaskList from "@/components/TaskList";
@@ -99,16 +100,21 @@ export default function Home() {
   const setKey = (k: string) => setCursors({ ...cursors, [tab]: k });
   const viewingNow = periodWhen(navFreq, key) === 0;
 
-  const entries = isTaskTab ? entriesFor(data, tab, key) : [];
-  const visible = filter === "All" ? entries : entries.filter((t) => t.category === filter);
-  const categoryCounts = entries.reduce<Partial<Record<Category, number>>>((acc, t) => {
-    acc[t.category] = (acc[t.category] ?? 0) + 1;
-    return acc;
-  }, {});
-
   // The period (in any tab's frequency) that contains the first day of what is on screen.
   const viewedDay = parseISODate(periodRange(navFreq, key).start);
   const keyFor = (f: Freq) => periodKey(f, viewedDay);
+
+  const entries = isTaskTab ? entriesFor(data, tab, key) : [];
+  // The Daily tab also lists this day's weekly and monthly tasks; their ticks cover the whole week or month.
+  const extraFreqs: Freq[] = tab === "daily" ? ["weekly", "monthly"] : [];
+  const extras = extraFreqs.map((f) => ({ freq: f, key: keyFor(f), entries: entriesFor(data, f, keyFor(f)) }));
+  const byFilter = (list: TaskEntry[]) => (filter === "All" ? list : list.filter((t) => t.category === filter));
+  const visible = byFilter(entries);
+  const categoryCounts = [...entries, ...extras.flatMap((x) => x.entries)].reduce<Partial<Record<Category, number>>>((acc, t) => {
+    acc[t.category] = (acc[t.category] ?? 0) + 1;
+    return acc;
+  }, {});
+  const extrasVisible = extras.some((x) => byFilter(x.entries).length > 0);
 
   const monthInvoices = data.invoices.filter((i) => i.month === key);
   const earlierUnsent = data.invoices.filter((i) => !i.sent && i.month < key);
@@ -175,7 +181,14 @@ export default function Home() {
     });
   };
 
-  const focus = FREQS.flatMap((f) => nowEntries[f].filter((e) => e.priority === "high" && !e.done));
+  // On the Daily tab, weekly and monthly tasks are already listed below, so the strip shows daily ones only.
+  const focus = (tab === "daily" ? ["daily" as Freq] : FREQS).flatMap((f) => nowEntries[f].filter((e) => e.priority === "high" && !e.done));
+  const listHandlers = {
+    onToggle: toggleTask,
+    onToggleSubtask: (t: TaskEntry, sid: string) => actions.toggleSubtask(t.id, t.periodKey, sid),
+    onEdit: (t: TaskEntry) => setSheet({ kind: "task", task: data.tasks.find((x) => x.id === t.id) }),
+    onDelete: (t: TaskEntry) => deleteTask(t.id),
+  };
   const emptyText =
     filter !== "All"
       ? `No ${filter} tasks here.`
@@ -225,14 +238,10 @@ export default function Home() {
             />
             {entries.length > 0 && <ProgressBar done={entries.filter((t) => t.done).length} total={entries.length} />}
             <CategoryFilter value={filter} counts={categoryCounts} onChange={setFilter} />
-            <TaskList
-              tasks={visible}
-              emptyText={emptyText}
-              onToggle={toggleTask}
-              onToggleSubtask={(t, sid) => actions.toggleSubtask(t.id, t.periodKey, sid)}
-              onEdit={(t) => setSheet({ kind: "task", task: data.tasks.find((x) => x.id === t.id) })}
-              onDelete={(t) => deleteTask(t.id)}
-            />
+            {(visible.length > 0 || !extrasVisible) && <TaskList tasks={visible} emptyText={emptyText} {...listHandlers} />}
+            {extras.map((x) => (
+              <PeriodSection key={x.freq} freq={x.freq} periodKey={x.key} tasks={byFilter(x.entries)} {...listHandlers} />
+            ))}
           </>
         ) : (
           <>
